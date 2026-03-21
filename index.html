@@ -6,6 +6,7 @@
   <title>ADAS // Road Monitor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
       --cyan: #00f0ff;
@@ -754,6 +755,567 @@
       .corner-tl, .corner-tr, .corner-bl, .corner-br { width: 20px; height: 20px; }
       footer { display: none; }
     }
+
+    /* === S02: Full-screen page containers === */
+    .page-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 150;
+      background: var(--bg);
+      display: none;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .page-fullscreen.active { display: flex; }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(0,240,255,0.06) 0%, transparent 100%);
+    }
+
+    .page-back-btn {
+      background: rgba(0, 15, 25, 0.8);
+      border: 1px solid var(--cyan-dim);
+      color: var(--cyan);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.55rem;
+      letter-spacing: 0.15em;
+      padding: 6px 16px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .page-back-btn:hover { background: rgba(0,240,255,0.1); border-color: var(--cyan); }
+    .page-back-btn:active { background: rgba(0,240,255,0.2); }
+
+    .page-title {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 0.8rem;
+      letter-spacing: 0.2em;
+      color: var(--cyan);
+      text-shadow: 0 0 12px var(--cyan-glow);
+    }
+
+    .page-content {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .page-placeholder {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      color: #2a4a5a;
+    }
+
+    /* === S02: HUD nav buttons === */
+    .hud-nav-btn {
+      position: absolute;
+      z-index: 20;
+      top: 16px;
+      right: 16px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 15, 25, 0.8);
+      border: 1px solid var(--cyan-dim);
+      color: var(--cyan);
+      font-size: 0.85rem;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: background 0.2s, border-color 0.2s;
+      pointer-events: auto;
+    }
+    .hud-nav-btn:hover { background: rgba(0,240,255,0.1); border-color: var(--cyan); }
+    .hud-nav-btn:active { background: rgba(0,240,255,0.2); }
+
+    #nav-settings { right: 16px; }
+    #nav-gallery  { right: 54px; }
+    #nav-trips    { right: 92px; }
+
+    /* === S02: Recording indicator === */
+    .rec-indicator {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    .rec-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      display: inline-block;
+      opacity: 0.3;
+    }
+
+    .rec-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.45rem;
+      letter-spacing: 0.15em;
+      color: #5a3a3a;
+    }
+
+    /* S04: Recording-active indicator state */
+    .rec-recording .rec-dot {
+      opacity: 1;
+      animation: dotPulse 1.5s ease-in-out infinite;
+    }
+    .rec-recording .rec-label {
+      color: #ff4444;
+    }
+
+    /* === S02: Hide toggle rows === */
+    .toggle-row-hidden { display: none !important; }
+
+    /* === S03: Settings page styles === */
+    #page-settings .page-content {
+      align-items: stretch;
+      justify-content: flex-start;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 8px;
+    }
+
+    .settings-section {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: rgba(0, 15, 25, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+
+    .settings-row-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.5rem;
+      letter-spacing: 0.15em;
+      color: var(--cyan);
+      margin-bottom: 2px;
+    }
+
+    .settings-row-desc {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.38rem;
+      letter-spacing: 0.08em;
+      color: #3a6a7a;
+    }
+
+    .settings-segment-group {
+      display: flex;
+      gap: 0;
+    }
+
+    .settings-segment-btn {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.42rem;
+      letter-spacing: 0.1em;
+      padding: 6px 14px;
+      background: #0a2030;
+      border: 1px solid var(--border);
+      color: #3a6a7a;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    .settings-segment-btn:first-child { border-radius: 4px 0 0 4px; }
+    .settings-segment-btn:last-child { border-radius: 0 4px 4px 0; }
+    .settings-segment-btn:not(:first-child) { border-left: none; }
+    .settings-segment-btn.active {
+      background: rgba(0,240,255,0.15);
+      border-color: var(--cyan);
+      color: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+    .settings-segment-btn.active + .settings-segment-btn { border-left: 1px solid var(--cyan); }
+
+    .settings-select {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.45rem;
+      letter-spacing: 0.1em;
+      padding: 6px 12px;
+      background: #0a2030;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--cyan);
+      cursor: pointer;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .settings-select:focus {
+      border-color: var(--cyan);
+      outline: none;
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+
+    /* === S05: Gallery page === */
+    #page-gallery .page-content {
+      align-items: stretch;
+      justify-content: flex-start;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 12px;
+    }
+    .gallery-card {
+      background: rgba(0, 15, 25, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .gallery-card.incident {
+      border-color: var(--red);
+      box-shadow: 0 0 8px rgba(255,51,68,0.2);
+    }
+    .gallery-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .gallery-card-time {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.5rem;
+      color: var(--cyan);
+      letter-spacing: 0.15em;
+    }
+    .gallery-card-meta {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.4rem;
+      color: #3a6a7a;
+    }
+    .gallery-card-badge {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.35rem;
+      background: rgba(255,51,68,0.15);
+      border: 1px solid var(--red);
+      color: var(--red);
+      padding: 2px 8px;
+      border-radius: 2px;
+      letter-spacing: 0.1em;
+    }
+    .gallery-card-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .gallery-action-btn {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.4rem;
+      letter-spacing: 0.15em;
+      background: rgba(0, 15, 25, 0.8);
+      border: 1px solid var(--cyan-dim);
+      color: var(--cyan);
+      padding: 8px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: background 0.2s, border-color 0.2s;
+      flex: 1;
+      text-align: center;
+    }
+    .gallery-action-btn:hover {
+      background: rgba(0,240,255,0.1);
+      border-color: var(--cyan);
+    }
+    .gallery-action-btn:active {
+      background: rgba(0,240,255,0.2);
+    }
+    .gallery-video-container {
+      margin-top: 4px;
+    }
+    .gallery-video-container video {
+      width: 100%;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .gallery-empty {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      color: #2a4a5a;
+    }
+
+    /* === S06: Trips page === */
+    #page-trips .page-content {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 12px;
+    }
+    .trips-calendar {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .trips-cal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+    }
+    .trips-cal-nav {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.5rem;
+      color: var(--cyan);
+      background: none;
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      cursor: pointer;
+      border-radius: 2px;
+      letter-spacing: 0.1em;
+    }
+    .trips-cal-nav:hover {
+      border-color: var(--cyan-dim);
+      box-shadow: 0 0 6px var(--cyan-glow);
+    }
+    .trips-cal-month {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.55rem;
+      letter-spacing: 0.15em;
+      color: var(--cyan);
+    }
+    .trips-cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+    .trips-cal-day-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.35rem;
+      color: #3a6a7a;
+      text-align: center;
+      padding: 4px 0;
+      letter-spacing: 0.1em;
+    }
+    .trips-cal-day {
+      text-align: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.4rem;
+      padding: 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      color: #5a8a9a;
+      transition: all 0.2s ease;
+    }
+    .trips-cal-day:hover:not(.empty) {
+      background: rgba(0, 240, 255, 0.05);
+      border-color: var(--border);
+    }
+    .trips-cal-day.has-trip {
+      box-shadow: 0 0 8px var(--cyan-glow);
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+    }
+    .trips-cal-day.selected {
+      background: rgba(0, 240, 255, 0.15);
+    }
+    .trips-cal-day.empty {
+      pointer-events: none;
+      cursor: default;
+    }
+    .trips-cal-day.today {
+      border-color: var(--cyan-dim);
+    }
+    .trip-card {
+      background: rgba(0, 15, 25, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .trip-card:hover {
+      border-color: var(--cyan-dim);
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+    .trip-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .trip-card-time {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.5rem;
+      color: var(--cyan);
+      letter-spacing: 0.15em;
+    }
+    .trip-card-meta {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.4rem;
+      color: #3a6a7a;
+    }
+    .trip-card-badge {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.35rem;
+      background: rgba(255, 170, 0, 0.15);
+      border: 1px solid var(--amber);
+      color: var(--amber);
+      padding: 2px 8px;
+      border-radius: 2px;
+      letter-spacing: 0.1em;
+    }
+    .trips-empty {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      color: #2a4a5a;
+      text-align: center;
+      padding: 32px 16px;
+    }
+    .trip-detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 8px;
+    }
+    .trip-detail-back {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.4rem;
+      color: var(--cyan);
+      background: none;
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 2px;
+      letter-spacing: 0.1em;
+    }
+    .trip-detail-back:hover {
+      border-color: var(--cyan-dim);
+      box-shadow: 0 0 6px var(--cyan-glow);
+    }
+    .trip-detail-info {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.45rem;
+      color: var(--cyan);
+      letter-spacing: 0.1em;
+    }
+    .trip-detail-tabs {
+      display: flex;
+      flex-direction: row;
+      gap: 0;
+    }
+    .trip-detail-tab {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.45rem;
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: #3a6a7a;
+      cursor: pointer;
+      letter-spacing: 0.1em;
+      transition: all 0.2s ease;
+    }
+    .trip-detail-tab:first-child {
+      border-radius: 4px 0 0 4px;
+    }
+    .trip-detail-tab:last-child {
+      border-radius: 0 4px 4px 0;
+    }
+    .trip-detail-tab.active {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+    .trip-map-container {
+      width: 100%;
+      height: 300px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .trip-log-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .trip-log-card {
+      background: rgba(0, 15, 25, 0.6);
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .trip-log-time {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.4rem;
+      color: var(--cyan);
+      letter-spacing: 0.1em;
+    }
+    .trip-log-badge {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.35rem;
+      padding: 2px 8px;
+      border-radius: 2px;
+      letter-spacing: 0.1em;
+      display: inline-block;
+      width: fit-content;
+    }
+    .trip-log-badge.impact {
+      background: rgba(255, 51, 68, 0.15);
+      border: 1px solid var(--red);
+      color: var(--red);
+    }
+    .trip-log-badge.adas {
+      background: rgba(255, 0, 106, 0.15);
+      border: 1px solid var(--magenta);
+      color: var(--magenta);
+    }
+    .trip-log-details {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.38rem;
+      color: #5a8a9a;
+    }
+    .trip-log-video-btn {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.35rem;
+      color: var(--cyan);
+      border: 1px solid var(--cyan);
+      background: transparent;
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 2px;
+      letter-spacing: 0.1em;
+      width: fit-content;
+      transition: all 0.2s ease;
+    }
+    .trip-log-video-btn:hover {
+      background: rgba(0, 240, 255, 0.1);
+      box-shadow: 0 0 6px var(--cyan-glow);
+    }
   </style>
 </head>
 <body>
@@ -795,6 +1357,15 @@
 
       <button class="btn-hud" id="cam-switch">SWITCH CAM</button>
       <button class="btn-hud" id="sensitivity-btn">SENS: MED</button>
+
+      <button class="hud-nav-btn" id="nav-settings" title="Settings">⚙</button>
+      <button class="hud-nav-btn" id="nav-gallery" title="Gallery">🎬</button>
+      <button class="hud-nav-btn" id="nav-trips" title="Trips">📍</button>
+
+      <div id="rec-indicator" class="rec-indicator">
+        <span class="rec-dot"></span>
+        <span class="rec-label">REC</span>
+      </div>
 
       <div id="driver-check-banner">DRIVER CHECK</div>
 
@@ -862,7 +1433,7 @@
       </div>
 
       <div class="section-hdr"><h3>LANE DEPARTURE</h3><div class="line"></div></div>
-      <div class="toggle-row">
+      <div class="toggle-row toggle-row-hidden">
         <span class="toggle-label">LANE DETECTION</span>
         <div class="toggle-switch" id="lane-toggle"></div>
       </div>
@@ -875,7 +1446,7 @@
       </div>
 
       <div class="section-hdr"><h3>DRIVER MONITOR</h3><div class="line"></div></div>
-      <div class="toggle-row">
+      <div class="toggle-row toggle-row-hidden">
         <span class="toggle-label">DROWSINESS CHECK</span>
         <div class="toggle-switch" id="driver-toggle"></div>
       </div>
@@ -885,6 +1456,114 @@
           <span class="driver-text" id="driver-text">DISABLED</span>
         </div>
         <div class="driver-timer" id="driver-timer">--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- S02: Full-screen page containers -->
+  <div id="page-settings" class="page-fullscreen">
+    <div class="page-header">
+      <button class="page-back-btn" data-page="page-settings">← BACK</button>
+      <span class="page-title">SETTINGS</span>
+    </div>
+    <div class="page-content">
+      <div class="settings-section">
+        <!-- Verbose Mode toggle -->
+        <div class="settings-row" id="setting-verbose">
+          <div>
+            <div class="settings-row-label">VERBOSE MODE</div>
+            <div class="settings-row-desc">Narrate all detected objects aloud</div>
+          </div>
+          <div class="toggle-switch" id="settings-verbose-toggle"></div>
+        </div>
+
+        <!-- Sensitivity 3-way selector -->
+        <div class="settings-row" id="setting-sensitivity">
+          <div>
+            <div class="settings-row-label">SENSITIVITY</div>
+            <div class="settings-row-desc">Detection sensitivity threshold</div>
+          </div>
+          <div class="settings-segment-group" id="settings-sensitivity-group">
+            <button class="settings-segment-btn" id="settings-sensitivity-low">LOW</button>
+            <button class="settings-segment-btn" id="settings-sensitivity-med">MED</button>
+            <button class="settings-segment-btn" id="settings-sensitivity-high">HIGH</button>
+          </div>
+        </div>
+
+        <!-- Lane Detection toggle -->
+        <div class="settings-row" id="setting-lane">
+          <div>
+            <div class="settings-row-label">LANE DETECTION</div>
+            <div class="settings-row-desc">Monitor lane boundaries and departure warnings</div>
+          </div>
+          <div class="toggle-switch" id="settings-lane-toggle"></div>
+        </div>
+
+        <!-- Driver Monitor toggle -->
+        <div class="settings-row" id="setting-driver">
+          <div>
+            <div class="settings-row-label">DRIVER MONITOR</div>
+            <div class="settings-row-desc">Periodic drowsiness and attention checks</div>
+          </div>
+          <div class="toggle-switch" id="settings-driver-toggle"></div>
+        </div>
+
+        <!-- Retention Duration selector -->
+        <div class="settings-row" id="setting-retention">
+          <div>
+            <div class="settings-row-label">RECORDING RETENTION</div>
+            <div class="settings-row-desc">Duration of recording buffer to keep</div>
+          </div>
+          <select class="settings-select" id="settings-retention-select">
+            <option value="5">5 MIN</option>
+            <option value="10" selected>10 MIN</option>
+            <option value="15">15 MIN</option>
+            <option value="20">20 MIN</option>
+            <option value="30">30 MIN</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="page-gallery" class="page-fullscreen">
+    <div class="page-header">
+      <button class="page-back-btn" data-page="page-gallery">← BACK</button>
+      <span class="page-title">GALLERY</span>
+    </div>
+    <div class="page-content">
+      <div id="gallery-list"></div>
+    </div>
+  </div>
+
+  <div id="page-trips" class="page-fullscreen">
+    <div class="page-header">
+      <button class="page-back-btn" data-page="page-trips">← BACK</button>
+      <span class="page-title">TRIPS</span>
+    </div>
+    <div class="page-content">
+      <div id="trips-calendar-view">
+        <div class="trips-calendar">
+          <div class="trips-cal-header">
+            <button class="trips-cal-nav" id="trips-cal-prev" aria-label="Previous month">←</button>
+            <span class="trips-cal-month" id="trips-cal-month-label"></span>
+            <button class="trips-cal-nav" id="trips-cal-next" aria-label="Next month">→</button>
+          </div>
+          <div class="trips-cal-grid" id="trips-cal-grid" role="grid" aria-label="Trip calendar"></div>
+        </div>
+        <div id="trips-day-list"></div>
+      </div>
+      <div id="trips-detail-view" style="display:none;">
+        <div class="trip-detail-header">
+          <button class="trip-detail-back" id="trips-back-to-cal">← CALENDAR</button>
+          <span class="trip-detail-info" id="trip-detail-info"></span>
+        </div>
+        <div class="trip-detail-tabs">
+          <button class="trip-detail-tab active" data-tab="map">MAP</button>
+          <button class="trip-detail-tab" data-tab="log">LOG</button>
+        </div>
+        <div id="trip-map-container" class="trip-map-container"></div>
+        <div id="trip-log-list" class="trip-log-list" style="display:none;"></div>
       </div>
     </div>
   </div>
@@ -899,8 +1578,23 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   <!-- Human.js for driver monitoring -->
   <script src="https://cdn.jsdelivr.net/npm/@vladmandic/human/dist/human.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
+    // ===== SETTINGS UTILITIES (S03 boundary contract) =====
+    function getSetting(key, defaultValue) {
+      const val = localStorage.getItem(key);
+      if (val === null) return defaultValue;
+      if (typeof defaultValue === 'boolean') return val === 'true';
+      if (typeof defaultValue === 'number') return Number(val);
+      return val;
+    }
+    function setSetting(key, value) {
+      localStorage.setItem(key, String(value));
+    }
+    window.getSetting = getSetting;
+    window.setSetting = setSetting;
+
     // ===== CONSTANTS =====
     const ROAD_CLASSES = [
       'person', 'bicycle', 'car', 'motorcycle', 'bus', 'truck',
@@ -964,6 +1658,14 @@
     let lastFollowingAlert = 0;
     const FOLLOWING_COOLDOWN = 3000;
 
+    // Quiet-mode: only narrate when explicitly enabled
+    let verboseMode = localStorage.getItem('adas_verbose_mode') === 'true';
+    window.verboseMode = verboseMode;
+
+    // Per-object cooldown map keyed by trackId + alertType
+    const alertCooldowns = {};
+    window.alertCooldowns = alertCooldowns;
+
     // Lane detection
     let laneDetectionEnabled = localStorage.getItem('adas_lane_detection') === 'true';
     let laneState = { left: null, right: null, departure: 'none', confidence: 0 };
@@ -988,6 +1690,8 @@
     // Speed
     let currentSpeed = null;
     let gpsSpeed = null;
+    let lastLat = null;
+    let lastLng = null;
     let visualSpeed = null;
     let geoWatchId = null;
     // Visual speed estimation
@@ -1136,6 +1840,589 @@
       return parts.slice(0, 5).join(', ');
     }
 
+    // ===== UNIFIED CRITICAL ALERT HOOK =====
+    // All critical alert paths route through this function.
+    // Downstream slices (S04 video auto-lock, S05 trip event tagging) consume
+    // window.fireCriticalAlert and window._lastCriticalAlert.
+    function fireCriticalAlert(type, details) {
+      const now = performance.now();
+      // Beep frequencies/durations and speech by alert type
+      switch (type) {
+        case 'crossing':
+          playBeep(1040, 80);
+          if (navigator.vibrate) navigator.vibrate([150, 80, 150, 80, 150]);
+          setTimeout(() => speak(`${details.class || 'object'} crossing from ${details.direction || 'ahead'}!`, 'critical'), 90);
+          break;
+        case 'ttc_imminent':
+          playBeep(1040, 100);
+          if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+          setTimeout(() => speak(`Brake! ${details.class || 'object'} too close!`, 'critical'), 100);
+          break;
+        case 'ttc_warning':
+          playBeep(880, 80);
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+          setTimeout(() => speak(`Slow down, ${details.class || 'object'} ahead, ${(details.ttc || 0).toFixed(1)} seconds`, 'high'), 90);
+          break;
+        case 'following_distance':
+          playBeep(700, 60);
+          if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+          setTimeout(() => speak(`Too close to ${details.class || 'vehicle'}, maintain distance`, 'high'), 80);
+          break;
+        case 'lane_departure':
+          playBeep(700, 100);
+          if (navigator.vibrate) navigator.vibrate([150, 100, 150]);
+          setTimeout(() => speak(`Lane departure ${details.direction || ''}!`, 'high'), 90);
+          break;
+        case 'drowsiness':
+          // Alarm oscillator is played separately in playDrowsinessAlarm().
+          // Only speech and metadata update here.
+          setTimeout(() => speak('Wake up! Drowsiness detected! Pull over safely!', 'critical'), 90);
+          break;
+        default:
+          playBeep(880, 80);
+          setTimeout(() => speak(`Alert: ${type}`, 'high'), 90);
+      }
+      // Update per-object cooldown if trackId is provided
+      if (details.trackId) {
+        const cooldownKey = details.trackId + '_' + type;
+        alertCooldowns[cooldownKey] = now;
+      }
+      // Update global last-critical-alert timestamp (backward compat)
+      lastCriticalAlert = now;
+      lastSpeechTime = now;
+      // Expose the most recent critical alert for downstream hooks
+      window._lastCriticalAlert = { type, details, timestamp: now };
+      if (window.videoRecorder) window.videoRecorder.lockCurrentChunk(type);
+      // S05: Tag ADAS event on active trip
+      if (window.tripLogger && window.tripLogger.currentTrip) {
+        window.tripLogger.addEvent('adas', type, lastLat, lastLng, details);
+      }
+    }
+    window.fireCriticalAlert = fireCriticalAlert;
+
+    // ===== S04: VIDEO RECORDER — CODEC DETECTION =====
+    function getRecorderMimeType() {
+      const types = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+      for (const t of types) { if (MediaRecorder.isTypeSupported(t)) return t; }
+      return '';
+    }
+
+    // ===== S04: VIDEO RECORDER — INDEXEDDB =====
+    function openVideoDatabase() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('dashcam_db', 2);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('dashcam_videos')) {
+            const store = db.createObjectStore('dashcam_videos', { keyPath: 'id', autoIncrement: true });
+            store.createIndex('startTime', 'startTime', { unique: false });
+            store.createIndex('locked', 'locked', { unique: false });
+          }
+          // S05: Trip store for GPS coordinates, events, and trip boundaries
+          if (!db.objectStoreNames.contains('dashcam_trips')) {
+            const tripStore = db.createObjectStore('dashcam_trips', { keyPath: 'id', autoIncrement: true });
+            tripStore.createIndex('date', 'date', { unique: false });
+            tripStore.createIndex('startTime', 'startTime', { unique: false });
+          }
+        };
+        request.onsuccess = (e) => {
+          console.log('[REC] IndexedDB opened');
+          resolve(e.target.result);
+        };
+        request.onerror = (e) => {
+          console.error('[REC] Error — IndexedDB open failed:', e.target.error);
+          reject(e.target.error);
+        };
+      });
+    }
+
+    // ===== S04: VIDEO RECORDER — MAIN OBJECT =====
+    const VideoRecorder = {
+      db: null,
+      recorder: null,
+      chunks: [],
+      rotationTimer: null,
+      currentChunkStartTime: null,
+      currentChunkLocked: false,
+      currentChunkLockReason: '',
+      isRecording: false,
+      _rotating: false,
+
+      async start() {
+        try {
+          this.db = await openVideoDatabase();
+        } catch (err) {
+          console.error('[REC] Error — cannot open IndexedDB:', err);
+          return;
+        }
+        if (!video.srcObject) {
+          console.error('[REC] Error — no camera stream (video.srcObject is null)');
+          return;
+        }
+        this._startNewRecording();
+        this.isRecording = true;
+        const recEl = document.getElementById('rec-indicator');
+        if (recEl) recEl.classList.add('rec-recording');
+        const recLabel = document.querySelector('#rec-indicator .rec-label');
+        if (recLabel) recLabel.textContent = 'REC';
+        console.log('[REC] VideoRecorder started');
+      },
+
+      stop() {
+        clearTimeout(this.rotationTimer);
+        this._rotating = false;
+        if (this.recorder && this.recorder.state === 'recording') {
+          this.recorder.stop();
+        }
+        this.isRecording = false;
+        const recEl = document.getElementById('rec-indicator');
+        if (recEl) recEl.classList.remove('rec-recording');
+        console.log('[REC] VideoRecorder stopped');
+      },
+
+      lockCurrentChunk(reason) {
+        this.currentChunkLocked = true;
+        this.currentChunkLockReason = reason;
+        console.log('[REC] Chunk locked — reason:', reason);
+        // If the chunk was already saved (between rotations), update the latest IDB record
+        if (this.db && (!this.recorder || this.recorder.state !== 'recording')) {
+          try {
+            const tx = this.db.transaction('dashcam_videos', 'readwrite');
+            const store = tx.objectStore('dashcam_videos');
+            const idx = store.index('startTime');
+            const cursorReq = idx.openCursor(null, 'prev');
+            cursorReq.onsuccess = (e) => {
+              const cursor = e.target.result;
+              if (cursor) {
+                const rec = cursor.value;
+                rec.locked = true;
+                rec.lockReason = reason;
+                cursor.update(rec);
+                console.log('[REC] Updated latest saved chunk with lock — id:', rec.id);
+              }
+            };
+          } catch (err) {
+            console.error('[REC] Error — failed to lock saved chunk:', err);
+          }
+        }
+      },
+
+      _startNewRecording() {
+        const mimeType = getRecorderMimeType();
+        const options = { videoBitsPerSecond: 1000000 };
+        if (mimeType) options.mimeType = mimeType;
+        this.recorder = new MediaRecorder(video.srcObject, options);
+        this.chunks = [];
+        this.currentChunkStartTime = Date.now();
+        this.currentChunkLocked = false;
+        this.currentChunkLockReason = '';
+        const self = this;
+
+        this.recorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            self.chunks.push(event.data);
+          }
+        };
+
+        this.recorder.onerror = (event) => {
+          console.error('[REC] Error — MediaRecorder error:', event.error || event);
+        };
+
+        this.recorder.onstop = async () => {
+          const blob = new Blob(self.chunks, { type: mimeType || 'video/webm' });
+          const endTime = Date.now();
+          const startTime = self.currentChunkStartTime;
+          const locked = self.currentChunkLocked;
+          const lockReason = self.currentChunkLockReason;
+          try {
+            await self._saveChunk(blob, startTime, endTime, locked, lockReason);
+            await self._cleanupOldChunks();
+          } catch (err) {
+            console.error('[REC] Error — chunk save/cleanup failed:', err);
+          }
+          // If rotating, start next chunk after save completes
+          if (self._rotating) {
+            self._rotating = false;
+            if (self.isRecording && video.srcObject) {
+              self._startNewRecording();
+            }
+          }
+        };
+
+        this.recorder.start(); // No timeslice — stop-and-restart pattern
+        this.rotationTimer = setTimeout(() => this._rotateChunk(), 60000);
+        console.log('[REC] Recording chunk started — mimeType:', mimeType || '(default)');
+      },
+
+      _rotateChunk() {
+        if (this.recorder && this.recorder.state === 'recording') {
+          this._rotating = true;
+          this.recorder.stop(); // onstop will save then start new recording
+        }
+      },
+
+      _saveChunk(blob, startTime, endTime, locked, lockReason) {
+        const self = this;
+        const mimeType = blob.type;
+        return new Promise((resolve, reject) => {
+          const record = { blob, startTime, endTime, locked, lockReason, size: blob.size, mimeType };
+          const tx = self.db.transaction('dashcam_videos', 'readwrite');
+          const store = tx.objectStore('dashcam_videos');
+          const req = store.put(record);
+
+          req.onsuccess = () => {
+            console.log('[REC] Chunk saved — size:', (blob.size / (1024 * 1024)).toFixed(2) + 'MB, locked:', locked, ', startTime:', new Date(startTime).toISOString());
+            resolve();
+          };
+          req.onerror = async (e) => {
+            const error = e.target.error;
+            if (error && error.name === 'QuotaExceededError') {
+              console.warn('[REC] Error — IndexedDB write failed: QuotaExceededError, retrying after cleanup');
+              try {
+                await self._cleanupOldChunks();
+                // Retry once
+                const tx2 = self.db.transaction('dashcam_videos', 'readwrite');
+                const store2 = tx2.objectStore('dashcam_videos');
+                const req2 = store2.put(record);
+                req2.onsuccess = () => {
+                  console.log('[REC] Chunk saved on retry — size:', (blob.size / (1024 * 1024)).toFixed(2) + 'MB');
+                  resolve();
+                };
+                req2.onerror = (e2) => {
+                  console.error('[REC] Error — IndexedDB retry also failed:', e2.target.error);
+                  reject(e2.target.error);
+                };
+              } catch (cleanupErr) {
+                console.error('[REC] Error — cleanup during QuotaExceeded retry failed:', cleanupErr);
+                reject(cleanupErr);
+              }
+            } else {
+              console.error('[REC] Error — IndexedDB write failed:', error);
+              reject(error);
+            }
+          };
+        });
+      },
+
+      _cleanupOldChunks() {
+        const self = this;
+        const maxChunks = getSetting('adas_retention_minutes', 10);
+        return new Promise((resolve, reject) => {
+          const tx = self.db.transaction('dashcam_videos', 'readwrite');
+          const store = tx.objectStore('dashcam_videos');
+          const idx = store.index('startTime');
+          const allRecords = [];
+
+          const cursorReq = idx.openCursor();
+          cursorReq.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              allRecords.push({ id: cursor.value.id, locked: cursor.value.locked });
+              cursor.continue();
+            } else {
+              // All records collected, sorted by startTime (oldest first)
+              const total = allRecords.length;
+              const lockedCount = allRecords.filter(r => r.locked).length;
+              if (total <= maxChunks) {
+                console.log('[REC] Storage — total chunks:', total, ', locked:', lockedCount);
+                resolve();
+                return;
+              }
+              let toDelete = total - maxChunks;
+              for (const rec of allRecords) {
+                if (toDelete <= 0) break;
+                if (rec.locked) {
+                  console.log('[REC] Cleanup — skipped locked chunk id:', rec.id);
+                  continue;
+                }
+                store.delete(rec.id);
+                console.log('[REC] Cleanup — deleted chunk id:', rec.id, '(unlocked, oldest)');
+                toDelete--;
+              }
+              console.log('[REC] Storage — total chunks:', total - (total - maxChunks - toDelete), ', locked:', lockedCount);
+              resolve();
+            }
+          };
+          cursorReq.onerror = (e) => {
+            console.error('[REC] Error — cleanup cursor failed:', e.target.error);
+            reject(e.target.error);
+          };
+        });
+      }
+    };
+    window.videoRecorder = VideoRecorder;
+
+    // ===== S05: TRIP LOGGER =====
+    const TripLogger = {
+      db: null,
+      currentTrip: null,
+      stoppedSince: null,
+      flushTimer: null,
+      lastCoordTime: 0,
+      STOP_TIMEOUT: 180000,   // 3 minutes in ms
+      COORD_INTERVAL: 5000,   // 5s coordinate sampling
+      FLUSH_INTERVAL: 30000,  // 30s periodic flush
+
+      async start() {
+        try {
+          this.db = await openVideoDatabase();
+          console.log('[TRIP] TripLogger started — DB ready');
+        } catch (err) {
+          console.error('[TRIP] Error — failed to open database:', err);
+        }
+      },
+
+      stop() {
+        if (this.currentTrip) {
+          this.endTrip();
+        }
+        if (this.flushTimer) {
+          clearInterval(this.flushTimer);
+          this.flushTimer = null;
+        }
+        console.log('[TRIP] TripLogger stopped');
+      },
+
+      _checkTripBoundary(speed, lat, lng) {
+        if (speed > 0 && !this.currentTrip) {
+          // Vehicle started moving — begin new trip
+          this.stoppedSince = null;
+          this.startTrip(lat, lng);
+        } else if (speed === 0 && this.currentTrip) {
+          // Vehicle stopped
+          if (!this.stoppedSince) {
+            this.stoppedSince = Date.now();
+            console.log('[TRIP] Vehicle stopped — watching for end-of-trip');
+          } else if (Date.now() - this.stoppedSince > this.STOP_TIMEOUT) {
+            console.log('[TRIP] Stopped for 3+ minutes — ending trip');
+            this.endTrip();
+          }
+        } else if (speed > 0 && this.stoppedSince) {
+          // Vehicle resumed before timeout
+          this.stoppedSince = null;
+          console.log('[TRIP] Vehicle resumed — cleared stop timer');
+        }
+      },
+
+      async startTrip(lat, lng) {
+        const now = Date.now();
+        const dateStr = new Date(now).toISOString().slice(0, 10);
+        this.currentTrip = {
+          startTime: now,
+          date: dateStr,
+          coordinates: lat != null && lng != null ? [{ lat, lng, time: now }] : [],
+          events: []
+        };
+        this.lastCoordTime = now;
+        this.stoppedSince = null;
+        console.log('[TRIP] Trip started at', dateStr);
+
+        // Write initial record to IDB and capture the auto-generated id
+        if (this.db) {
+          try {
+            const tx = this.db.transaction('dashcam_trips', 'readwrite');
+            const store = tx.objectStore('dashcam_trips');
+            const id = await new Promise((resolve, reject) => {
+              const req = store.add(this.currentTrip);
+              req.onsuccess = () => resolve(req.result);
+              req.onerror = () => reject(req.error);
+            });
+            this.currentTrip.id = id;
+            console.log('[TRIP] Trip record created — id:', id);
+          } catch (err) {
+            console.error('[TRIP] Error — failed to create trip record:', err);
+          }
+        }
+
+        // Start periodic flush
+        this.flushTimer = setInterval(() => this._flushToIDB(), this.FLUSH_INTERVAL);
+      },
+
+      async endTrip() {
+        if (!this.currentTrip) return;
+        this.currentTrip.endTime = Date.now();
+        console.log('[TRIP] Trip ended — duration:', Math.round((this.currentTrip.endTime - this.currentTrip.startTime) / 1000), 's, coords:', this.currentTrip.coordinates.length, ', events:', this.currentTrip.events.length);
+
+        // Final flush
+        await this._flushToIDB();
+
+        // Cleanup
+        if (this.flushTimer) {
+          clearInterval(this.flushTimer);
+          this.flushTimer = null;
+        }
+        this.currentTrip = null;
+        this.stoppedSince = null;
+      },
+
+      addCoordinate(lat, lng) {
+        if (!this.currentTrip) return;
+        const now = Date.now();
+        if (now - this.lastCoordTime < this.COORD_INTERVAL) return;
+        this.currentTrip.coordinates.push({ lat, lng, time: now });
+        this.lastCoordTime = now;
+      },
+
+      addEvent(type, subtype, lat, lng, details) {
+        if (!this.currentTrip) return;
+        const event = { type, subtype, lat, lng, time: Date.now(), details: details || {} };
+        this.currentTrip.events.push(event);
+        console.log('[TRIP] Event added:', type, subtype, '— total events:', this.currentTrip.events.length);
+      },
+
+      async _flushToIDB() {
+        if (!this.currentTrip || !this.currentTrip.id || !this.db) return;
+        try {
+          const tx = this.db.transaction('dashcam_trips', 'readwrite');
+          const store = tx.objectStore('dashcam_trips');
+          await new Promise((resolve, reject) => {
+            const req = store.put(this.currentTrip);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+          });
+          console.log('[TRIP] Flushed to IDB — coords:', this.currentTrip.coordinates.length, ', events:', this.currentTrip.events.length);
+        } catch (err) {
+          console.error('[TRIP] Error — IDB flush failed:', err);
+        }
+      },
+
+      async getTripsForDate(dateStr) {
+        if (!this.db) {
+          try { this.db = await openVideoDatabase(); } catch (err) {
+            console.error('[TRIP] Error — cannot open DB for query:', err);
+            return [];
+          }
+        }
+        return new Promise((resolve, reject) => {
+          const tx = this.db.transaction('dashcam_trips', 'readonly');
+          const store = tx.objectStore('dashcam_trips');
+          const index = store.index('date');
+          const request = index.getAll(dateStr);
+          request.onsuccess = () => {
+            console.log('[TRIP] getTripsForDate(' + dateStr + '):', request.result.length, 'trips');
+            resolve(request.result);
+          };
+          request.onerror = () => {
+            console.error('[TRIP] Error — getTripsForDate failed:', request.error);
+            reject(request.error);
+          };
+        });
+      },
+
+      async getDatesWithTrips() {
+        if (!this.db) {
+          try { this.db = await openVideoDatabase(); } catch (err) {
+            console.error('[TRIP] Error — cannot open DB for query:', err);
+            return [];
+          }
+        }
+        return new Promise((resolve, reject) => {
+          const tx = this.db.transaction('dashcam_trips', 'readonly');
+          const store = tx.objectStore('dashcam_trips');
+          const index = store.index('date');
+          const dates = new Set();
+          const cursorReq = index.openKeyCursor();
+          cursorReq.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              dates.add(cursor.key);
+              cursor.continue();
+            } else {
+              const result = Array.from(dates).sort().reverse();
+              console.log('[TRIP] getDatesWithTrips:', result.length, 'dates');
+              resolve(result);
+            }
+          };
+          cursorReq.onerror = (e) => {
+            console.error('[TRIP] Error — getDatesWithTrips cursor failed:', e.target.error);
+            reject(e.target.error);
+          };
+        });
+      }
+    };
+    window.tripLogger = TripLogger;
+
+    // ===== S05: ACCELEROMETER IMPACT DETECTION =====
+    const IMPACT_THRESHOLD_G = 2.0;
+    let lastImpactTime = 0;
+    const IMPACT_COOLDOWN = 5000; // 5s cooldown between impact events
+
+    async function initAccelerometer() {
+      if (!('DeviceMotionEvent' in window)) {
+        console.log('[TRIP] DeviceMotionEvent not supported — skipping accelerometer');
+        return;
+      }
+      // iOS 13+ requires explicit permission from user gesture
+      if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        try {
+          const permission = await DeviceMotionEvent.requestPermission();
+          if (permission !== 'granted') {
+            console.log('[TRIP] Accelerometer permission denied by user');
+            return;
+          }
+          console.log('[TRIP] Accelerometer permission granted (iOS)');
+        } catch (err) {
+          console.error('[TRIP] Error — accelerometer permission request failed:', err);
+          return;
+        }
+      }
+      window.addEventListener('devicemotion', handleDeviceMotion);
+      console.log('[TRIP] Accelerometer listener registered');
+    }
+
+    function handleDeviceMotion(event) {
+      // Prefer event.acceleration (reads ~0 at rest) over accelerationIncludingGravity (~1g at rest)
+      const accel = event.acceleration;
+      const accelGravity = event.accelerationIncludingGravity;
+      let totalG = 0;
+      let usingGravity = false;
+
+      if (accel && accel.x != null && accel.y != null && accel.z != null) {
+        totalG = Math.sqrt(accel.x ** 2 + accel.y ** 2 + accel.z ** 2) / 9.81;
+      } else if (accelGravity && accelGravity.x != null && accelGravity.y != null && accelGravity.z != null) {
+        totalG = Math.sqrt(accelGravity.x ** 2 + accelGravity.y ** 2 + accelGravity.z ** 2) / 9.81;
+        usingGravity = true;
+      } else {
+        return; // No acceleration data available
+      }
+
+      // Determine threshold — account for ~1g baseline when using gravity-included readings
+      const threshold = usingGravity ? IMPACT_THRESHOLD_G + 1.0 : IMPACT_THRESHOLD_G;
+      if (totalG <= threshold) return;
+
+      // Cooldown — prevent duplicate impact events
+      const now = Date.now();
+      if (now - lastImpactTime < IMPACT_COOLDOWN) return;
+      lastImpactTime = now;
+
+      console.log('[TRIP] Impact detected —', totalG.toFixed(1), 'g', usingGravity ? '(incl. gravity)' : '(pure acceleration)');
+
+      if (window.tripLogger && window.tripLogger.currentTrip) {
+        window.tripLogger.addEvent('impact', 'accelerometer', lastLat, lastLng, { g: totalG.toFixed(1) });
+      }
+    }
+
+    // ===== ALERT WORTHINESS HELPER =====
+    // Returns true when a scored detection represents a genuine approach-dynamic
+    // threat (crossing, low TTC, or following-distance violation).
+    // Used by density gating logic and consumed by downstream slices.
+    function isAlertWorthy(sd) {
+      if (!sd.track) return false;
+      if (sd.track.crossing) return true;
+      if (sd.track.ttc < 5) return true;
+      // Following distance check — mirrored from handleAlerts() logic
+      const speed = currentSpeed || 0;
+      if (speed > 20) {
+        const [, , bw, bh] = sd.det.bbox;
+        const areaRatio = (bw * bh) / ((video.videoWidth || 1280) * (video.videoHeight || 720));
+        const isVehicle = ['car', 'bus', 'truck', 'motorcycle'].includes(sd.det.class);
+        const areaThreshold = Math.max(0.06, 0.15 - speed * 0.001);
+        if (isVehicle && areaRatio > areaThreshold) return true;
+      }
+      return false;
+    }
+    window.isAlertWorthy = isAlertWorthy;
+
     function handleAlerts(zone, scoredDets) {
       const now = performance.now();
       if (!scoredDets || !scoredDets.length) {
@@ -1143,53 +2430,49 @@
         return;
       }
 
+      // Density-aware suppression: >8 objects = dense scene
+      const isDenseScene = scoredDets.length > 8;
+
+      // Track which alerts fire this frame to allow multiple distinct threats
+      const firedThisFrame = new Set();
+
       // === CRITICAL SAFETY ALERTS (highest priority, interrupt everything) ===
 
       // 1. Pedestrian/animal crossing — immediate alert
       for (const sd of scoredDets) {
         if (!sd.track) continue;
-        if (sd.track.crossing && now - lastCriticalAlert > CRITICAL_COOLDOWN) {
-          const dir = sd.track.crossingDir || '';
-          const what = sd.det.class;
-          lastCriticalAlert = now;
-          lastSpeechTime = now;
-          playBeep(1040, 80);
-          if (navigator.vibrate) navigator.vibrate([150, 80, 150, 80, 150]);
-          setTimeout(() => speak(`${what} crossing from ${dir}!`, 'critical'), 90);
-          return; // one critical alert per frame
+        const trackId = sd.track.id != null ? String(sd.track.id) : 'global';
+        const cooldownKey = trackId + '_crossing';
+        if (firedThisFrame.has(cooldownKey)) continue;
+        if (sd.track.crossing && now - (alertCooldowns[cooldownKey] || 0) > CRITICAL_COOLDOWN) {
+          firedThisFrame.add(cooldownKey);
+          fireCriticalAlert('crossing', { class: sd.det.class, direction: sd.track.crossingDir, trackId });
         }
       }
 
       // 2. Time-to-collision — "too close" / "brake"
-      let lowestTTC = Infinity;
-      let ttcObject = null;
+      // Evaluate all objects, not just the single lowest TTC, so multiple threats fire
       for (const sd of scoredDets) {
         if (!sd.track) continue;
-        if (sd.track.ttc < lowestTTC) {
-          lowestTTC = sd.track.ttc;
-          ttcObject = sd;
+        const ttc = sd.track.ttc;
+        if (ttc == null || ttc === Infinity) continue;
+        const trackId = sd.track.id != null ? String(sd.track.id) : 'global';
+
+        if (ttc < 1.5) {
+          const cooldownKey = trackId + '_ttc_imminent';
+          if (firedThisFrame.has(cooldownKey)) continue;
+          if (now - (alertCooldowns[cooldownKey] || 0) > CRITICAL_COOLDOWN) {
+            firedThisFrame.add(cooldownKey);
+            fireCriticalAlert('ttc_imminent', { class: sd.det.class, ttc, trackId });
+          }
+        } else if (ttc < 3) {
+          const cooldownKey = trackId + '_ttc_warning';
+          if (firedThisFrame.has(cooldownKey)) continue;
+          if (now - (alertCooldowns[cooldownKey] || 0) > CRITICAL_COOLDOWN) {
+            firedThisFrame.add(cooldownKey);
+            fireCriticalAlert('ttc_warning', { class: sd.det.class, ttc, trackId });
+          }
         }
-      }
-
-      if (lowestTTC < 1.5 && now - lastCriticalAlert > CRITICAL_COOLDOWN) {
-        // Imminent collision
-        lastCriticalAlert = now;
-        lastSpeechTime = now;
-        playBeep(1040, 100);
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
-        const what = ttcObject.det.class;
-        setTimeout(() => speak(`Brake! ${what} too close!`, 'critical'), 100);
-        return;
-      }
-
-      if (lowestTTC < 3 && now - lastCriticalAlert > CRITICAL_COOLDOWN) {
-        lastCriticalAlert = now;
-        lastSpeechTime = now;
-        playBeep(880, 80);
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-        const what = ttcObject.det.class;
-        setTimeout(() => speak(`Slow down, ${what} ahead, ${lowestTTC.toFixed(1)} seconds`, 'high'), 90);
-        return;
       }
 
       // 3. Following distance — at speed, large vehicle ahead filling frame
@@ -1201,40 +2484,45 @@
           const isVehicle = ['car', 'bus', 'truck', 'motorcycle'].includes(sd.det.class);
           // At 40+ km/h with vehicle taking >12% of frame = too close
           const areaThreshold = Math.max(0.06, 0.15 - speed * 0.001);
-          if (isVehicle && areaRatio > areaThreshold && now - lastFollowingAlert > FOLLOWING_COOLDOWN) {
-            lastFollowingAlert = now;
-            lastSpeechTime = now;
-            playBeep(700, 60);
-            if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
-            setTimeout(() => speak(`Too close to ${sd.det.class}, maintain distance`, 'high'), 80);
-            return;
+          const trackId = sd.track ? (sd.track.id != null ? String(sd.track.id) : 'global') : 'global';
+          const cooldownKey = trackId + '_following_distance';
+          if (firedThisFrame.has(cooldownKey)) continue;
+          if (isVehicle && areaRatio > areaThreshold && now - (alertCooldowns[cooldownKey] || 0) > FOLLOWING_COOLDOWN) {
+            firedThisFrame.add(cooldownKey);
+            fireCriticalAlert('following_distance', { class: sd.det.class, areaRatio, trackId });
           }
         }
       }
 
       // === REGULAR NARRATION (lower priority) ===
-      const interval = SPEECH_INTERVALS[zone] || 2000;
-      if (now - lastSpeechTime < interval) return;
+      // In quiet mode (verboseMode === false), skip all narration audio
+      if (verboseMode) {
+        // In dense scenes with verbose mode on, double the narration interval
+        const interval = isDenseScene
+          ? (SPEECH_INTERVALS[zone] || 2000) * 2
+          : (SPEECH_INTERVALS[zone] || 2000);
+        if (now - lastSpeechTime < interval) return;
 
-      const message = buildNarrationMessage(scoredDets);
-      if (!message) return;
+        const message = buildNarrationMessage(scoredDets);
+        if (!message) return;
 
-      // Don't repeat the exact same callout
-      if (message === lastSpokenMessage && zone === lastSpokenZone) return;
+        // Don't repeat the exact same callout
+        if (message === lastSpokenMessage && zone === lastSpokenZone) return;
 
-      lastSpeechTime = now;
-      lastSpokenMessage = message;
-      lastSpokenZone = zone;
+        lastSpeechTime = now;
+        lastSpokenMessage = message;
+        lastSpokenZone = zone;
 
-      // Beep for close objects
-      if (zone === 'red' || zone === 'orange') {
-        playBeep(BEEP_FREQS[zone], 60);
-        if (navigator.vibrate) navigator.vibrate(zone === 'red' ? [100, 50, 100] : [80]);
+        // Beep for close objects
+        if (zone === 'red' || zone === 'orange') {
+          playBeep(BEEP_FREQS[zone], 60);
+          if (navigator.vibrate) navigator.vibrate(zone === 'red' ? [100, 50, 100] : [80]);
+        }
+
+        setTimeout(() => {
+          speak(message, zone === 'red' ? 'critical' : 'normal');
+        }, zone === 'red' || zone === 'orange' ? 80 : 0);
       }
-
-      setTimeout(() => {
-        speak(message, zone === 'red' ? 'critical' : 'normal');
-      }, zone === 'red' || zone === 'orange' ? 80 : 0);
     }
 
     function playDrowsinessAlarm() {
@@ -1259,8 +2547,8 @@
         lfo.stop(audioCtx.currentTime + 2);
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 2);
       }
-      // Also speak it
-      speak('Wake up! Drowsiness detected! Pull over safely!', 'critical');
+      // Also fire unified critical alert (speech + metadata)
+      fireCriticalAlert('drowsiness', { alarm: true });
     }
 
     // ===== OBJECT TRACKING =====
@@ -1349,7 +2637,10 @@
       // (time until object "fills" a collision threshold)
       // Normalize: treat 25% of frame as "collision imminent"
       const frameArea = videoW * videoH;
-      const collisionArea = frameArea * 0.25;
+      // Tuned for Indian mixed-traffic conditions: 20% threshold catches
+      // motorcycles and autorickshaws that are physically smaller than cars.
+      // At 25% they'd never trigger TTC until dangerously close.
+      const collisionArea = frameArea * 0.20;
       const remaining = collisionArea - curr.area;
 
       if (remaining <= 0) {
@@ -1624,12 +2915,25 @@
       if (!navigator.geolocation) return;
       geoWatchId = navigator.geolocation.watchPosition(
         pos => {
+          // S05: Always capture latest position for impact handler and fireCriticalAlert
+          lastLat = pos.coords.latitude;
+          lastLng = pos.coords.longitude;
+
           if (pos.coords.speed !== null && pos.coords.speed >= 0) {
             gpsSpeed = Math.round(pos.coords.speed * 3.6); // m/s to km/h
             gpsSpeedVal.textContent = gpsSpeed;
             updateSpeedDisplay();
             // Calibrate visual speed against GPS
             calibrateVisualSpeed(gpsSpeed);
+          }
+
+          // S05: Feed trip boundary detection and coordinate sampling
+          if (window.tripLogger) {
+            const speed = pos.coords.speed !== null ? pos.coords.speed * 3.6 : 0;
+            window.tripLogger._checkTripBoundary(speed, lastLat, lastLng);
+            if (window.tripLogger.currentTrip) {
+              window.tripLogger.addCoordinate(lastLat, lastLng);
+            }
           }
         },
         () => { gpsSpeedVal.textContent = '--'; },
@@ -1974,9 +3278,7 @@
         const now = performance.now();
         if (now - lastLaneSpeechTime > LANE_SPEECH_COOLDOWN) {
           lastLaneSpeechTime = now;
-          speak(`Lane departure ${departure}!`, 'high');
-          playBeep(700, 100);
-          if (navigator.vibrate) navigator.vibrate([150, 100, 150]);
+          fireCriticalAlert('lane_departure', { direction: departure, confidence: laneState.confidence });
         }
       }
     }
@@ -2410,11 +3712,133 @@
       localStorage.setItem('adas_sensitivity', sensitivity);
     });
 
+    // ===== S03: SETTINGS PAGE =====
+    function initSettingsPage() {
+      // Verbose toggle
+      const verboseToggle = document.getElementById('settings-verbose-toggle');
+      if (verboseToggle) {
+        verboseToggle.classList.toggle('active', verboseMode);
+      } else {
+        console.warn('[SETTINGS] settings-verbose-toggle not found');
+      }
+      // Sensitivity segments
+      const sensLow = document.getElementById('settings-sensitivity-low');
+      const sensMed = document.getElementById('settings-sensitivity-med');
+      const sensHigh = document.getElementById('settings-sensitivity-high');
+      if (sensLow && sensMed && sensHigh) {
+        sensLow.classList.toggle('active', sensitivity === 'LOW');
+        sensMed.classList.toggle('active', sensitivity === 'MED');
+        sensHigh.classList.toggle('active', sensitivity === 'HIGH');
+      } else {
+        console.warn('[SETTINGS] sensitivity segment buttons not found');
+      }
+      // Lane toggle
+      const laneSettingsToggle = document.getElementById('settings-lane-toggle');
+      if (laneSettingsToggle) {
+        laneSettingsToggle.classList.toggle('active', laneDetectionEnabled);
+      } else {
+        console.warn('[SETTINGS] settings-lane-toggle not found');
+      }
+      // Driver toggle
+      const driverSettingsToggle = document.getElementById('settings-driver-toggle');
+      if (driverSettingsToggle) {
+        driverSettingsToggle.classList.toggle('active', driverMonitorEnabled);
+      } else {
+        console.warn('[SETTINGS] settings-driver-toggle not found');
+      }
+      // Retention select
+      const retentionSelect = document.getElementById('settings-retention-select');
+      if (retentionSelect) {
+        retentionSelect.value = String(getSetting('adas_retention_minutes', 10));
+      } else {
+        console.warn('[SETTINGS] settings-retention-select not found');
+      }
+    }
+
+    // --- S03: Settings change handlers ---
+    // Verbose Mode
+    document.getElementById('settings-verbose-toggle').addEventListener('click', () => {
+      verboseMode = !verboseMode;
+      window.verboseMode = verboseMode;
+      setSetting('adas_verbose_mode', verboseMode);
+      document.getElementById('settings-verbose-toggle').classList.toggle('active', verboseMode);
+      console.log('[SETTINGS] adas_verbose_mode changed to', verboseMode);
+    });
+
+    // Sensitivity segments
+    ['LOW', 'MED', 'HIGH'].forEach(level => {
+      document.getElementById('settings-sensitivity-' + level.toLowerCase()).addEventListener('click', () => {
+        sensitivity = level;
+        setSetting('adas_sensitivity', sensitivity);
+        sensitivityBtn.textContent = `SENS: ${sensitivity}`;
+        document.getElementById('settings-sensitivity-low').classList.toggle('active', sensitivity === 'LOW');
+        document.getElementById('settings-sensitivity-med').classList.toggle('active', sensitivity === 'MED');
+        document.getElementById('settings-sensitivity-high').classList.toggle('active', sensitivity === 'HIGH');
+        console.log('[SETTINGS] adas_sensitivity changed to', sensitivity);
+      });
+    });
+
+    // Lane Detection
+    document.getElementById('settings-lane-toggle').addEventListener('click', () => {
+      laneDetectionEnabled = !laneDetectionEnabled;
+      setSetting('adas_lane_detection', laneDetectionEnabled);
+      updateLaneToggleUI();
+      document.getElementById('settings-lane-toggle').classList.toggle('active', laneDetectionEnabled);
+      console.log('[SETTINGS] adas_lane_detection changed to', laneDetectionEnabled);
+    });
+
+    // Driver Monitor
+    document.getElementById('settings-driver-toggle').addEventListener('click', async () => {
+      driverMonitorEnabled = !driverMonitorEnabled;
+      setSetting('adas_driver_monitor', driverMonitorEnabled);
+      updateDriverToggleUI();
+      document.getElementById('settings-driver-toggle').classList.toggle('active', driverMonitorEnabled);
+
+      if (driverMonitorEnabled && isRunning) {
+        if (!humanInstance) {
+          statusEl.textContent = 'LOADING DRIVER MONITOR...';
+          try {
+            await initHuman();
+            statusEl.textContent = 'ADAS ONLINE // DRIVER MONITOR ACTIVE';
+          } catch (err) {
+            console.error('Failed to load Human.js:', err);
+            driverMonitorEnabled = false;
+            setSetting('adas_driver_monitor', false);
+            updateDriverToggleUI();
+            document.getElementById('settings-driver-toggle').classList.remove('active');
+            statusEl.textContent = 'DRIVER MONITOR LOAD FAILED';
+            return;
+          }
+        }
+        startDriverCheckTimer();
+      } else {
+        stopDriverCheckTimer();
+      }
+      console.log('[SETTINGS] adas_driver_monitor changed to', driverMonitorEnabled);
+    });
+
+    // Retention Duration
+    document.getElementById('settings-retention-select').addEventListener('change', (e) => {
+      const val = e.target.value;
+      setSetting('adas_retention_minutes', val);
+      console.log('[SETTINGS] adas_retention_minutes changed to', val);
+    });
+
     // ===== CAMERA SWITCH =====
     document.getElementById('cam-switch').addEventListener('click', async () => {
       facingMode = facingMode === 'environment' ? 'user' : 'environment';
       try {
+        // Stop recording before switching camera (stream will be killed)
+        if (window.videoRecorder && window.videoRecorder.isRecording) {
+          window.videoRecorder.stop();
+          console.log('[REC] Camera switch — stopping recorder');
+        }
         await startCamera(facingMode);
+        // Restart recording with new stream
+        if (window.videoRecorder && isRunning) {
+          window.videoRecorder.start();
+          console.log('[REC] Camera switch — restarting recorder with new stream');
+        }
       } catch (err) {
         statusEl.textContent = 'CAMERA SWITCH FAILED: ' + err.message;
       }
@@ -2454,6 +3878,7 @@
         await startCamera(facingMode);
 
         initGPS();
+        await initAccelerometer(); // S05: needs user gesture for iOS permission
 
         isRunning = true;
         statusEl.textContent = driverMonitorEnabled
@@ -2464,6 +3889,15 @@
           startDriverCheckTimer();
         }
         adasDetectLoop();
+
+        // Start recording after camera and ADAS are ready
+        if (window.videoRecorder) {
+          window.videoRecorder.start();
+        }
+        // S05: Start trip logger after DB-dependent components are ready
+        if (window.tripLogger) {
+          window.tripLogger.start();
+        }
       } catch (err) {
         statusEl.textContent = 'ERROR: ' + err.message;
         statusEl.style.color = 'var(--red)';
@@ -2473,6 +3907,666 @@
 
     // Init saved settings on page load
     loadSettings();
+
+    // ===== S05: VIDEO GALLERY =====
+    let galleryRecords = [];
+    let galleryBlobUrls = [];
+
+    async function initGalleryPage() {
+      console.log('[GALLERY] Loading recordings...');
+      const listEl = document.getElementById('gallery-list');
+      if (!listEl) { console.error('[GALLERY] Error — gallery-list element not found'); return; }
+      try {
+        const db = await openVideoDatabase();
+        const tx = db.transaction('dashcam_videos', 'readonly');
+        const store = tx.objectStore('dashcam_videos');
+        const index = store.index('startTime');
+        const request = index.openCursor(null, 'prev');
+        const records = [];
+        await new Promise((resolve, reject) => {
+          request.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              records.push(cursor.value);
+              cursor.continue();
+            } else {
+              resolve();
+            }
+          };
+          request.onerror = () => reject(request.error);
+        });
+
+        galleryRecords = records;
+        console.log('[GALLERY] Found', records.length, 'recordings');
+
+        if (records.length === 0) {
+          listEl.innerHTML = '<span class="gallery-empty">NO RECORDINGS YET</span>';
+          return;
+        }
+
+        let html = '';
+        for (const rec of records) {
+          const time = new Date(rec.startTime).toLocaleTimeString();
+          const durationSec = rec.endTime ? Math.round((rec.endTime - rec.startTime) / 1000) + 's' : '--';
+          const sizeMB = rec.size ? (rec.size / (1024 * 1024)).toFixed(1) + ' MB' : '--';
+          const isIncident = rec.locked;
+          const badgeReason = rec.lockReason ? rec.lockReason.toUpperCase() : 'INCIDENT';
+
+          html += '<div class="gallery-card' + (isIncident ? ' incident' : '') + '" data-record-id="' + rec.id + '">';
+          html += '<div class="gallery-card-header">';
+          html += '<span class="gallery-card-time">' + time + '</span>';
+          html += '<span class="gallery-card-meta">' + durationSec + ' · ' + sizeMB + '</span>';
+          if (isIncident) {
+            html += '<span class="gallery-card-badge">' + badgeReason + '</span>';
+          }
+          html += '</div>';
+          html += '<div class="gallery-card-actions">';
+          html += '<button class="gallery-action-btn" data-action="play" data-id="' + rec.id + '">▶ PLAY</button>';
+          html += '<button class="gallery-action-btn" data-action="save" data-id="' + rec.id + '">💾 SAVE</button>';
+          html += '<button class="gallery-action-btn" data-action="share" data-id="' + rec.id + '">📤 SHARE</button>';
+          html += '</div>';
+          html += '</div>';
+        }
+        listEl.innerHTML = html;
+
+        // Event delegation for action buttons
+        listEl.addEventListener('click', function galleryClickHandler(e) {
+          const btn = e.target.closest('.gallery-action-btn');
+          if (!btn) return;
+          const action = btn.dataset.action;
+          const id = Number(btn.dataset.id);
+          if (action === 'play') galleryPlayVideo(id);
+          else if (action === 'save') gallerySaveVideo(id);
+          else if (action === 'share') galleryShareVideo(id);
+        });
+
+      } catch (err) {
+        console.error('[GALLERY] Error — failed to load recordings:', err);
+        listEl.innerHTML = '<span class="gallery-empty">ERROR LOADING RECORDINGS</span>';
+      }
+    }
+
+    function galleryPlayVideo(id) {
+      const record = galleryRecords.find(r => r.id === id);
+      if (!record || !record.blob) { console.error('[GALLERY] Error — record or blob not found for id:', id); return; }
+
+      const card = document.querySelector('.gallery-card[data-record-id="' + id + '"]');
+      if (!card) return;
+
+      // Toggle: remove existing player if present
+      const existing = card.querySelector('.gallery-video-container');
+      if (existing) {
+        existing.remove();
+        console.log('[GALLERY] Toggled off clip', id);
+        return;
+      }
+
+      const container = document.createElement('div');
+      container.className = 'gallery-video-container';
+      const video = document.createElement('video');
+      video.controls = true;
+      video.playsInline = true;
+      const blobUrl = URL.createObjectURL(record.blob);
+      galleryBlobUrls.push(blobUrl);
+      video.src = blobUrl;
+      video.addEventListener('ended', () => {
+        URL.revokeObjectURL(blobUrl);
+        const idx = galleryBlobUrls.indexOf(blobUrl);
+        if (idx !== -1) galleryBlobUrls.splice(idx, 1);
+      });
+      container.appendChild(video);
+      card.appendChild(container);
+      video.play().catch(() => {});
+      console.log('[GALLERY] Playing clip', id);
+    }
+
+    function gallerySaveVideo(id) {
+      const record = galleryRecords.find(r => r.id === id);
+      if (!record || !record.blob) { console.error('[GALLERY] Error — record or blob not found for id:', id); return; }
+
+      const ext = (record.mimeType && record.mimeType.includes('mp4')) ? '.mp4' : '.webm';
+      const filename = 'dashcam_' + new Date(record.startTime).toISOString().replace(/[:.]/g, '-') + ext;
+      const blobUrl = URL.createObjectURL(record.blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      console.log('[GALLERY] Saving clip', id);
+    }
+
+    async function galleryShareVideo(id) {
+      const record = galleryRecords.find(r => r.id === id);
+      if (!record || !record.blob) { console.error('[GALLERY] Error — record or blob not found for id:', id); return; }
+
+      const ext = (record.mimeType && record.mimeType.includes('mp4')) ? '.mp4' : '.webm';
+      const filename = 'dashcam_' + new Date(record.startTime).toISOString().replace(/[:.]/g, '-') + ext;
+      const mimeType = record.mimeType || 'video/webm';
+
+      try {
+        const file = new File([record.blob], filename, { type: mimeType });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'Dashcam Clip' });
+          console.log('[GALLERY] Shared clip', id);
+        } else {
+          console.log('[GALLERY] Share not supported, falling back to download for clip', id);
+          gallerySaveVideo(id);
+        }
+      } catch (err) {
+        console.error('[GALLERY] Error — share failed, falling back to download:', err);
+        gallerySaveVideo(id);
+      }
+    }
+
+    function galleryCleanupBlobUrls() {
+      for (const url of galleryBlobUrls) {
+        URL.revokeObjectURL(url);
+      }
+      galleryBlobUrls = [];
+      console.log('[GALLERY] Cleaned up blob URLs');
+    }
+
+    // ===== S06: TRIPS PAGE =====
+    let tripsMap = null;
+    let tripsBlobUrls = [];
+    let tripsCurrentMonth = new Date().getMonth();
+    let tripsCurrentYear = new Date().getFullYear();
+    let tripsDatesWithTrips = [];
+    let tripsSelectedDate = null;
+
+    async function initTripsPage() {
+      try {
+        // Reset to calendar view
+        document.getElementById('trips-calendar-view').style.display = '';
+        document.getElementById('trips-detail-view').style.display = 'none';
+
+        // Load dates with trips
+        if (window.tripLogger && typeof window.tripLogger.getDatesWithTrips === 'function') {
+          tripsDatesWithTrips = await window.tripLogger.getDatesWithTrips();
+        } else {
+          console.warn('[TRIPS] tripLogger.getDatesWithTrips not available');
+          tripsDatesWithTrips = [];
+        }
+
+        // Render calendar for current month
+        renderCalendar(tripsCurrentYear, tripsCurrentMonth);
+
+        // Clear any previous day list
+        document.getElementById('trips-day-list').innerHTML = '';
+        tripsSelectedDate = null;
+
+        console.log('[TRIPS] Initialized trips page, dates with trips:', tripsDatesWithTrips.length);
+      } catch (err) {
+        console.error('[TRIPS] Error — initTripsPage failed:', err);
+      }
+    }
+
+    function renderCalendar(year, month) {
+      const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+        'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+      const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+      // Update month label
+      document.getElementById('trips-cal-month-label').textContent = monthNames[month] + ' ' + year;
+
+      // Update nav button handlers
+      const prevBtn = document.getElementById('trips-cal-prev');
+      const nextBtn = document.getElementById('trips-cal-next');
+      prevBtn.onclick = function() {
+        tripsCurrentMonth--;
+        if (tripsCurrentMonth < 0) { tripsCurrentMonth = 11; tripsCurrentYear--; }
+        renderCalendar(tripsCurrentYear, tripsCurrentMonth);
+      };
+      nextBtn.onclick = function() {
+        tripsCurrentMonth++;
+        if (tripsCurrentMonth > 11) { tripsCurrentMonth = 0; tripsCurrentYear++; }
+        renderCalendar(tripsCurrentYear, tripsCurrentMonth);
+      };
+
+      // Build grid
+      const grid = document.getElementById('trips-cal-grid');
+      let html = '';
+
+      // Day-of-week headers
+      for (let i = 0; i < 7; i++) {
+        html += '<div class="trips-cal-day-label" role="columnheader">' + dayLabels[i] + '</div>';
+      }
+
+      // Calculate first day and days in month
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const today = new Date();
+      const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+
+      // Empty cells before first day
+      for (let i = 0; i < firstDay; i++) {
+        html += '<div class="trips-cal-day empty"></div>';
+      }
+
+      // Day cells
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        let classes = 'trips-cal-day';
+        if (tripsDatesWithTrips.indexOf(dateStr) !== -1) classes += ' has-trip';
+        if (dateStr === todayStr) classes += ' today';
+        if (dateStr === tripsSelectedDate) classes += ' selected';
+        html += '<div class="' + classes + '" role="gridcell" data-date="' + dateStr + '" tabindex="0">' + d + '</div>';
+      }
+
+      grid.innerHTML = html;
+
+      // Attach click handlers to day cells
+      grid.querySelectorAll('.trips-cal-day:not(.empty)').forEach(function(cell) {
+        cell.addEventListener('click', function() {
+          selectDate(cell.getAttribute('data-date'));
+        });
+        cell.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            selectDate(cell.getAttribute('data-date'));
+          }
+        });
+      });
+
+      console.log('[TRIPS] Rendered calendar:', monthNames[month], year);
+    }
+
+    async function selectDate(dateStr) {
+      tripsSelectedDate = dateStr;
+
+      // Update selected visual in calendar
+      document.querySelectorAll('.trips-cal-day.selected').forEach(function(el) {
+        el.classList.remove('selected');
+      });
+      const selectedCell = document.querySelector('.trips-cal-day[data-date="' + dateStr + '"]');
+      if (selectedCell) selectedCell.classList.add('selected');
+
+      const dayList = document.getElementById('trips-day-list');
+
+      try {
+        let trips = [];
+        if (window.tripLogger && typeof window.tripLogger.getTripsForDate === 'function') {
+          trips = await window.tripLogger.getTripsForDate(dateStr);
+        }
+
+        if (!trips || trips.length === 0) {
+          dayList.innerHTML = '<div class="trips-empty">NO TRIPS ON ' + dateStr + '</div>';
+          console.log('[TRIPS] Selected date:', dateStr, ', 0 trips');
+          return;
+        }
+
+        let html = '';
+        trips.forEach(function(trip) {
+          const startTime = new Date(trip.startTime);
+          const hours = String(startTime.getHours()).padStart(2, '0');
+          const mins = String(startTime.getMinutes()).padStart(2, '0');
+          const timeStr = hours + ':' + mins;
+
+          // Duration in minutes
+          let durationStr = '—';
+          if (trip.endTime) {
+            const durationMs = new Date(trip.endTime) - startTime;
+            const durationMins = Math.round(durationMs / 60000);
+            durationStr = durationMins + ' MIN';
+          }
+
+          const eventCount = (trip.events && trip.events.length) || 0;
+
+          html += '<div class="trip-card" data-trip-id="' + trip.id + '">';
+          html += '<div class="trip-card-header">';
+          html += '<span class="trip-card-time">' + timeStr + '</span>';
+          if (eventCount > 0) {
+            html += '<span class="trip-card-badge">' + eventCount + ' EVENT' + (eventCount !== 1 ? 'S' : '') + '</span>';
+          }
+          html += '</div>';
+          html += '<span class="trip-card-meta">' + durationStr + ' · ' + (trip.coordinates ? trip.coordinates.length : 0) + ' GPS POINTS</span>';
+          html += '</div>';
+        });
+
+        dayList.innerHTML = html;
+
+        // Attach click handlers to trip cards
+        dayList.querySelectorAll('.trip-card').forEach(function(card, idx) {
+          card.addEventListener('click', function() {
+            showTripDetail(trips[idx]);
+          });
+        });
+
+        console.log('[TRIPS] Selected date:', dateStr, ',', trips.length, 'trips');
+      } catch (err) {
+        dayList.innerHTML = '<div class="trips-empty">ERROR LOADING TRIPS</div>';
+        console.error('[TRIPS] Error — selectDate failed:', err);
+      }
+    }
+
+    function showTripDetail(trip) {
+      // Destroy any existing map from a previous detail view
+      if (tripsMap) {
+        tripsMap.remove();
+        tripsMap = null;
+      }
+      // Revoke any lingering blob URLs
+      tripsBlobUrls.forEach(function(url) { URL.revokeObjectURL(url); });
+      tripsBlobUrls = [];
+
+      // Hide calendar, show detail
+      document.getElementById('trips-calendar-view').style.display = 'none';
+      document.getElementById('trips-detail-view').style.display = '';
+
+      // Populate detail header with date, time, duration, event count
+      var startTime = new Date(trip.startTime);
+      var dateStr = startTime.getFullYear() + '-' + String(startTime.getMonth() + 1).padStart(2, '0') + '-' + String(startTime.getDate()).padStart(2, '0');
+      var hours = String(startTime.getHours()).padStart(2, '0');
+      var mins = String(startTime.getMinutes()).padStart(2, '0');
+      var durationStr = '—';
+      if (trip.endTime) {
+        var durationMins = Math.round((new Date(trip.endTime) - startTime) / 60000);
+        durationStr = durationMins + ' MIN';
+      }
+      var eventCount = (trip.events && trip.events.length) || 0;
+      document.getElementById('trip-detail-info').textContent = dateStr + ' // ' + hours + ':' + mins + ' // ' + durationStr + ' // ' + eventCount + ' EVENT' + (eventCount !== 1 ? 'S' : '');
+
+      // Wire back button
+      document.getElementById('trips-back-to-cal').onclick = function() {
+        if (tripsMap) {
+          tripsMap.remove();
+          tripsMap = null;
+        }
+        tripsBlobUrls.forEach(function(url) { URL.revokeObjectURL(url); });
+        tripsBlobUrls = [];
+        document.getElementById('trip-map-container').innerHTML = '';
+        document.getElementById('trip-log-list').innerHTML = '';
+        document.getElementById('trips-calendar-view').style.display = '';
+        document.getElementById('trips-detail-view').style.display = 'none';
+        console.log('[TRIPS] Back to calendar');
+      };
+
+      var hasCoords = trip.coordinates && trip.coordinates.length > 0;
+      var mapContainer = document.getElementById('trip-map-container');
+      var logList = document.getElementById('trip-log-list');
+      var tabs = document.querySelectorAll('.trip-detail-tab');
+      var mapTabBtn = tabs[0];
+      var logTabBtn = tabs[1];
+
+      // Wire tab buttons
+      tabs.forEach(function(tab) {
+        tab.onclick = function() {
+          tabs.forEach(function(t) { t.classList.remove('active'); });
+          tab.classList.add('active');
+          var tabName = tab.getAttribute('data-tab');
+          mapContainer.style.display = tabName === 'map' ? '' : 'none';
+          logList.style.display = tabName === 'log' ? '' : 'none';
+          // Leaflet needs invalidateSize when switching back to map tab
+          if (tabName === 'map' && tripsMap) {
+            setTimeout(function() { if (tripsMap) tripsMap.invalidateSize(); }, 100);
+          }
+          console.log('[TRIPS] Switched to tab:', tabName);
+        };
+      });
+
+      // MAP rendering
+      if (hasCoords) {
+        // Default to MAP tab
+        mapTabBtn.style.display = '';
+        tabs.forEach(function(t) { t.classList.remove('active'); });
+        mapTabBtn.classList.add('active');
+        mapContainer.style.display = '';
+        logList.style.display = 'none';
+        mapContainer.innerHTML = '';
+
+        try {
+          tripsMap = L.map('trip-map-container');
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+          }).addTo(tripsMap);
+
+          // Draw route polyline
+          var latLngs = trip.coordinates.map(function(c) { return [c.lat, c.lng]; });
+          var polyline = L.polyline(latLngs, {
+            color: '#00f0ff',
+            weight: 3,
+            opacity: 0.8
+          }).addTo(tripsMap);
+
+          // Fit bounds to route
+          tripsMap.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+
+          // Add event markers
+          if (trip.events && trip.events.length > 0) {
+            trip.events.forEach(function(evt) {
+              if (evt.lat != null && evt.lng != null) {
+                var isImpact = evt.type === 'impact';
+                var markerColor = isImpact ? '#ff3344' : '#ff006a';
+                var evtTime = new Date(evt.time);
+                var evtTimeStr = String(evtTime.getHours()).padStart(2, '0') + ':' + String(evtTime.getMinutes()).padStart(2, '0') + ':' + String(evtTime.getSeconds()).padStart(2, '0');
+                var popupContent = '<strong>' + (isImpact ? 'IMPACT' : 'ADAS') + '</strong><br>' +
+                  (evt.subtype || evt.type) + '<br>' +
+                  evtTimeStr;
+                if (evt.details) {
+                  popupContent += '<br><em>' + (typeof evt.details === 'string' ? evt.details : JSON.stringify(evt.details)) + '</em>';
+                }
+                L.circleMarker([evt.lat, evt.lng], {
+                  radius: 8,
+                  fillColor: markerColor,
+                  color: markerColor,
+                  weight: 2,
+                  opacity: 0.9,
+                  fillOpacity: 0.6
+                }).bindPopup(popupContent).addTo(tripsMap);
+              }
+            });
+          }
+
+          // Critical: invalidateSize after container becomes visible
+          setTimeout(function() {
+            if (tripsMap) tripsMap.invalidateSize();
+          }, 150);
+
+        } catch (mapErr) {
+          console.error('[TRIPS] Error — Leaflet map init failed:', mapErr);
+          mapContainer.innerHTML = '<div class="trips-empty">MAP INITIALIZATION FAILED</div>';
+        }
+      } else {
+        // No coordinates — hide map tab, default to log tab
+        mapTabBtn.style.display = 'none';
+        tabs.forEach(function(t) { t.classList.remove('active'); });
+        logTabBtn.classList.add('active');
+        mapContainer.style.display = 'none';
+        mapContainer.innerHTML = '<div class="trips-empty">NO GPS DATA FOR THIS TRIP</div>';
+        logList.style.display = '';
+      }
+
+      // Render event log
+      renderTripLog(trip);
+
+      // Link videos to events
+      linkVideosToEvents(trip);
+
+      var coordCount = trip.coordinates ? trip.coordinates.length : 0;
+      console.log('[TRIPS] Showing trip detail: id=' + (trip.id || 'unknown') + ', coordinates=' + coordCount + ', events=' + eventCount);
+    }
+
+    function renderTripLog(trip) {
+      var logList = document.getElementById('trip-log-list');
+      logList.innerHTML = '';
+
+      if (!trip.events || trip.events.length === 0) {
+        logList.innerHTML = '<div class="trips-empty">NO EVENTS DURING THIS TRIP</div>';
+        console.log('[TRIPS] Rendered log: 0 events');
+        return;
+      }
+
+      // Sort events by time ascending (chronological)
+      var sortedEvents = trip.events.slice().sort(function(a, b) {
+        return (a.time || 0) - (b.time || 0);
+      });
+
+      sortedEvents.forEach(function(evt) {
+        var evtTime = new Date(evt.time);
+        var timeStr = String(evtTime.getHours()).padStart(2, '0') + ':' + String(evtTime.getMinutes()).padStart(2, '0') + ':' + String(evtTime.getSeconds()).padStart(2, '0');
+        var isImpact = evt.type === 'impact';
+        var badgeClass = isImpact ? 'impact' : 'adas';
+        var badgeText = isImpact ? 'IMPACT' : 'ADAS';
+        var subtypeText = evt.subtype || evt.type || '—';
+
+        var card = document.createElement('div');
+        card.className = 'trip-log-card';
+        card.setAttribute('data-event-time', evt.time || '');
+
+        var html = '<div class="trip-log-time">' + timeStr + '</div>';
+        html += '<span class="trip-log-badge ' + badgeClass + '">' + badgeText + '</span>';
+        html += '<div class="trip-log-details">' + subtypeText.toUpperCase();
+        if (evt.details) {
+          var detailStr = typeof evt.details === 'string' ? evt.details : JSON.stringify(evt.details);
+          html += ' — ' + detailStr;
+        }
+        html += '</div>';
+
+        card.innerHTML = html;
+        logList.appendChild(card);
+      });
+
+      console.log('[TRIPS] Rendered log: ' + sortedEvents.length + ' events');
+    }
+
+    async function linkVideosToEvents(trip) {
+      if (!trip.events || trip.events.length === 0) {
+        console.log('[TRIPS] Linked 0 video clips to events');
+        return;
+      }
+
+      try {
+        var db = await openVideoDatabase();
+        var tx = db.transaction('dashcam_videos', 'readonly');
+        var store = tx.objectStore('dashcam_videos');
+        var request = store.getAll();
+        var videoChunks = await new Promise(function(resolve, reject) {
+          request.onsuccess = function() { resolve(request.result || []); };
+          request.onerror = function() { reject(request.error); };
+        });
+
+        var linkedCount = 0;
+        var logCards = document.querySelectorAll('#trip-log-list .trip-log-card');
+
+        logCards.forEach(function(card) {
+          var eventTimeStr = card.getAttribute('data-event-time');
+          if (!eventTimeStr) return;
+          var eventTime = Number(eventTimeStr);
+
+          // Find a video chunk whose time range overlaps this event
+          var matchingChunk = videoChunks.find(function(chunk) {
+            return chunk.startTime <= eventTime && eventTime <= chunk.endTime;
+          });
+
+          if (matchingChunk && matchingChunk.blob) {
+            var btn = document.createElement('button');
+            btn.className = 'trip-log-video-btn';
+            btn.textContent = '▶ VIEW CLIP';
+            btn.setAttribute('aria-label', 'View video clip for this event');
+
+            btn.addEventListener('click', function(e) {
+              e.stopPropagation();
+
+              // Toggle: remove existing video if present
+              var existingVideo = card.querySelector('.trip-log-video-container');
+              if (existingVideo) {
+                existingVideo.remove();
+                console.log('[TRIPS] Toggled off video clip');
+                return;
+              }
+
+              var container = document.createElement('div');
+              container.className = 'trip-log-video-container';
+              container.style.marginTop = '8px';
+              var video = document.createElement('video');
+              video.controls = true;
+              video.playsInline = true;
+              video.style.width = '100%';
+              video.style.borderRadius = '4px';
+              var blobUrl = URL.createObjectURL(matchingChunk.blob);
+              tripsBlobUrls.push(blobUrl);
+              video.src = blobUrl;
+              video.addEventListener('ended', function() {
+                URL.revokeObjectURL(blobUrl);
+                var idx = tripsBlobUrls.indexOf(blobUrl);
+                if (idx !== -1) tripsBlobUrls.splice(idx, 1);
+              });
+              container.appendChild(video);
+              card.appendChild(container);
+              video.play().catch(function() {});
+              console.log('[TRIPS] Playing event video clip');
+            });
+
+            card.appendChild(btn);
+            linkedCount++;
+          }
+        });
+
+        console.log('[TRIPS] Linked ' + linkedCount + ' video clips to events');
+      } catch (err) {
+        console.error('[TRIPS] Error — video linking failed:', err);
+      }
+    }
+
+    function tripsCleanup() {
+      if (tripsMap) {
+        tripsMap.remove();
+        tripsMap = null;
+      }
+      // Revoke all blob URLs
+      tripsBlobUrls.forEach(function(url) { URL.revokeObjectURL(url); });
+      tripsBlobUrls = [];
+      // Reset detail view to calendar
+      document.getElementById('trips-detail-view').style.display = 'none';
+      document.getElementById('trips-calendar-view').style.display = '';
+      // Clear log list
+      document.getElementById('trip-log-list').innerHTML = '';
+      document.getElementById('trip-map-container').innerHTML = '';
+      tripsSelectedDate = null;
+      console.log('[TRIPS] Cleanup complete');
+    }
+
+    // === S02: Page navigation functions ===
+    function showPage(pageId) {
+      const el = document.getElementById(pageId);
+      if (el) {
+        el.style.display = 'flex';
+        console.log('[NAV] showPage:', pageId);
+        if (pageId === 'page-settings' && typeof initSettingsPage === 'function') initSettingsPage();
+        if (pageId === 'page-gallery' && typeof initGalleryPage === 'function') initGalleryPage();
+        if (pageId === 'page-trips' && typeof initTripsPage === 'function') initTripsPage();
+      } else {
+        console.warn('[NAV] showPage: element not found:', pageId);
+      }
+    }
+
+    function hidePage(pageId) {
+      const el = document.getElementById(pageId);
+      if (el) {
+        el.style.display = 'none';
+        console.log('[NAV] hidePage:', pageId);
+        if (pageId === 'page-gallery') { galleryCleanupBlobUrls(); }
+        if (pageId === 'page-trips' && typeof tripsCleanup === 'function') tripsCleanup();
+      } else {
+        console.warn('[NAV] hidePage: element not found:', pageId);
+      }
+    }
+
+    window.showPage = showPage;
+    window.hidePage = hidePage;
+
+    // Wire HUD nav buttons
+    document.getElementById('nav-settings').addEventListener('click', () => showPage('page-settings'));
+    document.getElementById('nav-gallery').addEventListener('click', () => showPage('page-gallery'));
+    document.getElementById('nav-trips').addEventListener('click', () => showPage('page-trips'));
+
+    // Wire back buttons
+    document.querySelectorAll('.page-back-btn').forEach(btn => {
+      btn.addEventListener('click', () => hidePage(btn.dataset.page));
+    });
   </script>
 </body>
 </html>
