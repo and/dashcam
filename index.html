@@ -1623,6 +1623,7 @@
 
     const INFERENCE_W = 320;
     const INFERENCE_H = 240;
+    const DETECTION_INTERVAL_MS = 150;   // ~6-7 FPS max for ML inference
     const DRIVER_CHECK_INTERVAL = 45000; // 45s
     const DRIVER_CHECK_DURATION = 3000;  // 3s
     const EAR_THRESHOLD = 0.2;
@@ -1641,8 +1642,8 @@
     let lastTime = performance.now();
     let frameCount = 0;
     let fps = 0;
-    let skipFrames = 0;
-    let framesSinceLastDetect = 0;
+    let lastDetectionTime = 0;
+    let detectionFrameCount = 0; // counts completed detections for sub-sampling heavy ops
 
     // Object tracking — multi-frame history for velocity
     let prevDetections = [];
@@ -3406,12 +3407,20 @@
         return;
       }
 
-      const t0 = performance.now();
+      // Throttle: skip frames until DETECTION_INTERVAL_MS has elapsed
+      const now = performance.now();
+      if (now - lastDetectionTime < DETECTION_INTERVAL_MS) {
+        requestAnimationFrame(adasDetectLoop);
+        return;
+      }
+      lastDetectionTime = now;
+
+      const t0 = now;
 
       // Downscale to offscreen canvas
       offCtx.drawImage(video, 0, 0, INFERENCE_W, INFERENCE_H);
 
-      // Detect — run every frame, no skipping
+      // Detect
       let predictions;
       try {
         predictions = await model.detect(offCanvas, 20, 0.2);
@@ -3422,6 +3431,7 @@
       }
 
       const latency = Math.round(performance.now() - t0);
+      detectionFrameCount++;
 
       // FPS counter
       frameCount++;
@@ -3445,8 +3455,8 @@
       const videoW = video.videoWidth;
       const videoH = video.videoHeight;
 
-      // Visual speed estimation
-      estimateVisualSpeed(video);
+      // Visual speed estimation — run every other detection to reduce CPU load
+      if (detectionFrameCount % 2 === 0) estimateVisualSpeed(video);
 
       // Lane detection (runs on raw video, not offscreen)
       detectLanes(video);
@@ -3552,6 +3562,8 @@
       let totalFrames = 0;
 
       while (performance.now() - checkStart < DRIVER_CHECK_DURATION - 500) {
+        // Brief pause between detections to avoid saturating the GPU
+        await new Promise(r => setTimeout(r, 100));
         try {
           const result = await humanInstance.detect(video);
           totalFrames++;
