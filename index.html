@@ -970,6 +970,68 @@
       box-shadow: 0 0 8px var(--cyan-glow);
     }
 
+    .settings-row-full {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .zone-slider-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+    }
+    .zone-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      flex: 1;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    .zone-slider.caution::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 6px rgba(255,170,0,0.5);
+      cursor: pointer;
+    }
+    .zone-slider.caution::-moz-range-thumb {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--amber); border: none; cursor: pointer;
+    }
+    .zone-slider.danger::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 6px rgba(255,51,68,0.5);
+      cursor: pointer;
+    }
+    .zone-slider.danger::-moz-range-thumb {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--red); border: none; cursor: pointer;
+    }
+    .zone-slider-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.4rem;
+      letter-spacing: 0.1em;
+      min-width: 52px;
+    }
+    .zone-slider-label.caution { color: var(--amber); }
+    .zone-slider-label.danger  { color: var(--red); }
+    .zone-slider-val {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.42rem;
+      letter-spacing: 0.08em;
+      min-width: 28px;
+      text-align: right;
+    }
+    .zone-slider-val.caution { color: var(--amber); }
+    .zone-slider-val.danger  { color: var(--red); }
+
     /* === S05: Gallery page === */
     #page-gallery .page-content {
       align-items: stretch;
@@ -1522,6 +1584,24 @@
             <option value="30">30 MIN</option>
           </select>
         </div>
+
+        <!-- Zone line adjustments -->
+        <div class="settings-row settings-row-full" id="setting-zones">
+          <div>
+            <div class="settings-row-label">DETECTION ZONES</div>
+            <div class="settings-row-desc">Adjust zone line positions — push down to clear vehicle bonnet from detection area</div>
+          </div>
+          <div class="zone-slider-row">
+            <span class="zone-slider-label caution">CAUTION</span>
+            <input type="range" min="30" max="95" step="1" class="zone-slider caution" id="settings-caution-zone">
+            <span class="zone-slider-val caution" id="settings-caution-zone-val">60%</span>
+          </div>
+          <div class="zone-slider-row">
+            <span class="zone-slider-label danger">DANGER</span>
+            <input type="range" min="35" max="98" step="1" class="zone-slider danger" id="settings-danger-zone">
+            <span class="zone-slider-val danger" id="settings-danger-zone-val">80%</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1695,6 +1775,10 @@
     let lastLng = null;
     let visualSpeed = null;
     let geoWatchId = null;
+    // Zone line positions (% from top of frame)
+    let cautionZoneY = getSetting('adas_caution_zone_y', 60);
+    let dangerZoneY  = getSetting('adas_danger_zone_y',  80);
+
     // Visual speed estimation
     let prevFlowFrame = null;
     let flowCalibrationFactor = 0; // ratio: km/h per pixel-flow-unit
@@ -2740,6 +2824,13 @@
       return Math.min(100, Math.round(raw * 100 * sensitivityMult));
     }
 
+    function applyZoneLines() {
+      const yellowLine = document.querySelector('.danger-line.yellow');
+      const redLine    = document.querySelector('.danger-line.red');
+      if (yellowLine) yellowLine.style.top = cautionZoneY + '%';
+      if (redLine)    redLine.style.top    = dangerZoneY  + '%';
+    }
+
     function getDangerZone(score) {
       if (score >= 70) return 'red';
       if (score >= 45) return 'orange';
@@ -2785,6 +2876,10 @@
       for (const [trackId, track] of Object.entries(trackedObjects)) {
         const det = { class: track.class, bbox: track.bbox, score: track.score };
         const [bx, by, bw, bh] = track.bbox;
+
+        // Exclude objects whose center falls below the danger zone line (vehicle bonnet area)
+        const centerYPct = (by + bh / 2) / videoH * 100;
+        if (centerYPct > dangerZoneY) continue;
 
         const danger = computeDangerScore(det, trackId, videoW, videoH);
         if (danger > maxDanger) maxDanger = danger;
@@ -3765,6 +3860,15 @@
       } else {
         console.warn('[SETTINGS] settings-retention-select not found');
       }
+      // Zone sliders
+      const cautionSlider = document.getElementById('settings-caution-zone');
+      const dangerSlider  = document.getElementById('settings-danger-zone');
+      if (cautionSlider && dangerSlider) {
+        cautionSlider.value = cautionZoneY;
+        dangerSlider.value  = dangerZoneY;
+        document.getElementById('settings-caution-zone-val').textContent = cautionZoneY + '%';
+        document.getElementById('settings-danger-zone-val').textContent  = dangerZoneY  + '%';
+      }
     }
 
     // --- S03: Settings change handlers ---
@@ -3834,6 +3938,29 @@
       const val = e.target.value;
       setSetting('adas_retention_minutes', val);
       console.log('[SETTINGS] adas_retention_minutes changed to', val);
+    });
+
+    // Zone sliders
+    document.getElementById('settings-caution-zone').addEventListener('input', (e) => {
+      cautionZoneY = parseInt(e.target.value);
+      if (cautionZoneY >= dangerZoneY) {
+        cautionZoneY = dangerZoneY - 5;
+        e.target.value = cautionZoneY;
+      }
+      document.getElementById('settings-caution-zone-val').textContent = cautionZoneY + '%';
+      setSetting('adas_caution_zone_y', cautionZoneY);
+      applyZoneLines();
+    });
+
+    document.getElementById('settings-danger-zone').addEventListener('input', (e) => {
+      dangerZoneY = parseInt(e.target.value);
+      if (dangerZoneY <= cautionZoneY) {
+        dangerZoneY = cautionZoneY + 5;
+        e.target.value = dangerZoneY;
+      }
+      document.getElementById('settings-danger-zone-val').textContent = dangerZoneY + '%';
+      setSetting('adas_danger_zone_y', dangerZoneY);
+      applyZoneLines();
     });
 
     // ===== CAMERA SWITCH =====
@@ -4569,6 +4696,9 @@
 
     window.showPage = showPage;
     window.hidePage = hidePage;
+
+    // Apply saved zone line positions on startup
+    applyZoneLines();
 
     // Wire HUD nav buttons
     document.getElementById('nav-settings').addEventListener('click', () => showPage('page-settings'));
